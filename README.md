@@ -2,6 +2,8 @@
 
 Jake Teton-Landis, <just.1.jake@gmail.com>
 
+Intermittently availible on [my prototyping server](http://skunkworks.teton-landis.org)
+
 ## Features
 
 - Search web pages and images at the same time!
