@@ -13,7 +13,6 @@ require "cgi"
 
 set :haml, :format => :html5
 
-
 # static basics -- just compile and serve
 get '/' do
     haml :index, :layout => :layout, :layout_engine => :erb

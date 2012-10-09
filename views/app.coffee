@@ -8,6 +8,18 @@
 # Requires Handlebars.js
 # Requires 
 
+USE_FAKE_DATA = true
+
+SEARCH_IMAGE = (q) ->
+    "/search/images/#{encodeURI(q)}"
+SEARCH_WEB = (q) ->
+    "/search/web/#{encodeURI(q)}"
+
+if USE_FAKE_DATA
+    SEARCH_IMAGE = (q) ->
+        "/dummy/images.html"
+    SEARCH_WEB = (q) ->
+        "/dummy/web.html"
 
 animate_typing = (input, end_string, speed, cbk) ->
     if end_string? && end_string.length
@@ -38,12 +50,12 @@ class SearchRequest
         @queryString = query
         that = this
         # search a static proxy page because Google denies CORS and iframes
-        $.get('/search/web/' + encodeURI(query),
+        $.get(SEARCH_WEB(query),
             (data, textStatus, xhr) =>
                 # TODO: process data
                 @processPageResults(data)
         )
-        $.get('/search/images/' + encodeURI(query),
+        $.get(SEARCH_IMAGE(query),
             (data, textStatus, xhr) =>
                 # TODO: process data
                 @processImageResults(data)
@@ -187,5 +199,5 @@ $('document').ready ->
     # for now search is hardcoded to 'beta reduction' on server-side
     # IE, that's the only search my proxy page serves
     $('#search-field').focus().val('')
-    animate_typing($('#search-field'), 'beta reduction', 30, -> $('#go-button').click())
+    animate_typing($('#search-field'), 'beta reduction', 30, -> $('#go-button').click()) if USE_FAKE_DATA
 
