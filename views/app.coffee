@@ -153,6 +153,7 @@ class SearchRequest
 
     startUI: ->
         console.log('started UI')
+        window.filterController = new FilterController
         @chuckPages()
         @advancePage()
         load_more = =>
@@ -167,6 +168,10 @@ class SearchRequest
     advancePage: ->
         @currentPage += 1
         items = @results[ @currentPage ]
+        # re-draw filter ui
+        # boy I wish I was using Emberjs
+        window.filterController.addItems(items)
+        window.filterController.refreshUI()
         # use a dummy element because isotope is really tempermental about wanting
         # jquery-constructed arrays
         dummy = $('<div></div>')
@@ -211,6 +216,8 @@ class SearchResult
         @tags = opts.tags
         # Invoke template to produce DOM item
         @rep = @TEMPLATE(this)
+        $(@rep).data('result', this)
+
 
 class ImageResult extends SearchResult
     TEMPLATE : Handlebars.compile("""
@@ -229,6 +236,51 @@ class ImageResult extends SearchResult
         @width = opts.width
         @height = opts.height
         @rep = @TEMPLATE(this)
+        $(@rep).data('result', this)
+
+# use to keep track of possible values for each tag
+class Set
+    contents: []
+    contructor: (items) ->
+        for i in items
+            @addItem(i)
+
+    contains: (i) ->
+        @contents.indexOf(i) > -1
+
+    addItem: (i) ->
+        @contents.push(i) unless @contains(i)
+
+class FilterController
+    tags: {}
+
+    addItems: (items) ->
+        for i in items
+            for t in i.tags
+                @tags[t.name] = new Set unless @tags[t.name]?
+                @tags[t.name].addItem(t.value)
+
+    buildUI: ->
+        box = $('<div id="filter-box"></div>')
+        for tag_name, set in @tags
+            grp = $('<div class="btn-group input-prepend"></div>').data('filter-tag', tag_name)
+            grp.append( $("""<span class="add-on">#{tag_name}</span>""") )
+            $("""<button type="button" class="btn">All</button>""").data('filter-value', '!all')
+            for opt in set.contents
+                grp.append(
+                    $("""<button type="button" class="btn">#{opt}</button>""").data('filter-value', opt)
+                )
+            grp.appendTo(box)
+        @rep = box
+
+    refreshUI: ->
+        @rep.remove() if @rep
+        @buildUI()
+        @rep.appendTo($('#filters'))
+        console.log(@rep)
+
+
+
 
     
 window.CURRENT_SEARCH = CURRENT_SEARCH = null
