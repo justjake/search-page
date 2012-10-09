@@ -118,14 +118,14 @@ class SearchRequest
         results = page.find('.images_table td')
         results.each (i, el) =>
             $this = $(el)
-            window.TD = el
             google_link = URI($this.find('a').attr('href'))
 
             # parse last text line
             size_data = el.childNodes[ el.childNodes.length - 1 ].textContent
             dims = size_data.split(' - ')[0]
-            format = size_data.split(' ')
+            format = size_data.split(decodeURI('%C2%A0'))
             format = format[format.length - 1]
+            window.FMT = format
 
             nodes = Array.prototype.slice.call(el.childNodes)
             description = (n.textContent for n in nodes[5..-2]).join(' ')
@@ -156,9 +156,10 @@ class SearchRequest
         window.filterController = new FilterController
         @chuckPages()
         @advancePage()
+        window.filterController.rep.appendTo( $('#filters') )
         load_more = =>
             @advancePage()
-        $('<div class="load-more">Load more items...</div>').appendTo($('body')).click(load_more).inview(load_more)
+        $('<div class="load-more">Load more items...</div>').appendTo($('body')).click(load_more).bind('inview', load_more)
 
     # simulate pagination to reduce DOM strain, and because Google is hating pretty hard
     chuckPages: (per_page = 15) ->
@@ -171,7 +172,7 @@ class SearchRequest
         # re-draw filter ui
         # boy I wish I was using Emberjs
         window.filterController.addItems(items)
-        window.filterController.refreshUI()
+        window.filterController.buildUI()
         # use a dummy element because isotope is really tempermental about wanting
         # jquery-constructed arrays
         dummy = $('<div></div>')
@@ -179,7 +180,15 @@ class SearchRequest
         items = dummy.children()
         window.ISO.isotope('insert', items)
 
+        # handle end of pages
+        if @currentPage >= (@results.length - 1)
+            # remove auto-scroller guy
+            $('.load-more').remove()
 
+
+
+
+tag_class_template = '{{#each tags}}tag-{{this.name}}-{{this.value}} {{/each}}'
 
 tag_template = '''
 <div class="tags">
@@ -195,7 +204,7 @@ tag_template = '''
 class SearchResult
 
     TEMPLATE : Handlebars.compile("""
-    <a class="search-result" href="{{url}}">
+    <a class="search-result #{tag_class_template}" href="{{url}}">
         <h1>{{title}}</h1>
         <p>{{description}}</p>
         #{tag_template}
@@ -221,7 +230,7 @@ class SearchResult
 
 class ImageResult extends SearchResult
     TEMPLATE : Handlebars.compile("""
-    <a class="search-result" href="{{url}}">
+    <a class="search-result #{tag_class_template}" href="{{url}}">
         <img src="{{imgSrc}}" width="{{width}}" height="{{height}}" alt="{{title}}" />
         <p>{{description}}</p>
         <p class="size">{{size}}</p>
@@ -261,25 +270,28 @@ class FilterController
                 @tags[t.name].addItem(t.value)
 
     buildUI: ->
-        box = $('<div id="filter-box"></div>')
+        box = $('#filter-box')
+        if box.length == 0
+            box = $('<div id="filter-box" class="btn-toolbar"></div>')
         for tag_name, set of @tags
-            console.log(tag_name, 'is a set of', set)
-            grp = $('<div class="btn-group input-prepend"></div>').data('filter-tag', tag_name)
-            grp.append( $("""<span class="add-on">#{tag_name}</span>""") )
-            $("""<button type="button" class="btn">All</button>""").data('filter-value', '!all')
+            grp = $(".filters-#{tag_name}")
+            if grp.length == 0
+                # create anew
+                grp = $("""<div class="btn-group input-prepend filters-#{tag_name}" data-toggle="buttons-radio"></div>""")
+                grp.append( $("""<span class="add-on">#{tag_name}</span>""") )
+                grp.append( $("""<button type="button" class="btn" data-toggle="button">All</button>""").data('filter-value', '').button('toggle'))
+                grp.appendTo(box)
             for opt in set.contents
-                grp.append(
-                    $("""<button type="button" class="btn">#{opt}</button>""").data('filter-value', opt)
-                )
-            console.log('built group', grp)
-            grp.appendTo(box)
+                if $(".filter-value-#{opt}").length == 0
+                    # create and append button
+                    btn = $("""<button type="button" class="btn filter-value-#{opt}">#{opt}</button>""").data('filter-value', ".tag-#{tag_name}-#{opt}")
+                    grp.append(btn)
+            console.log('build button group', grp)
         @rep = box
+            
 
-    refreshUI: ->
-        @rep.remove() if @rep
-        @buildUI()
-        @rep.appendTo($('#filters'))
-        console.log(@rep)
+
+
 
 
 
@@ -292,15 +304,32 @@ $('document').ready ->
     $('.search-bar').submit (e) ->
         e.preventDefault()
         window.CURRENT_SEARCH = new SearchRequest( $('#search-field').val() )
+        window.ISO.isotope('destroy') if window.ISO?
+        # realllllly cool isotope thing
+        window.ISO = $('#results').isotope
+            itemSelector: '.search-result'
         false
 
-    # realllllly cool isotope thing
-    window.ISO = $('#results').isotope
-        itemSelector: '.search-result'
 
     # that we re-layout regularly...
     on_resize ->
         window.ISO.isotope('reLayout')
+
+    # viviy filter controls from now until end of time
+    latest_filter = ''
+    $('#filters').on('click', 'button', (e) ->
+        e.preventDefault()
+
+        $(e.target).button('toggle')
+        active_buttons = $('#filters').find('.btn.active')
+        classes = active_buttons.map (idx, el) ->
+            $(el).data('filter-value')
+
+        window.latestFilter = classes.toArray()
+        console.log('applying filter:', latestFilter)
+        window.ISO.isotope({filter: latestFilter.join('')})
+
+    )
 
     # TODO: nodejs app that provides a live google proxy
     # for now search is hardcoded to 'beta reduction' on server-side
