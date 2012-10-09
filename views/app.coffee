@@ -1,12 +1,6 @@
 # Google search interface
-# brought to you by Acid.
 # Jake Teton-Landis <just.1.jake@gmail.com>
 # October 7, 2012
-
-
-# Requires URI.js (http://medialize.github.com/URI.js/)
-# Requires Handlebars.js
-# Requires 
 
 USE_FAKE_DATA = true
 
@@ -30,22 +24,54 @@ animate_typing = (input, end_string, speed, cbk) ->
     else
         cbk()
 
+# split an array into smaller chunks
+chunk_array = (ar, per_page) ->
+    to_page = ar[..]
+    my_pages = []
+    while to_page.length
+        my_pages.push(to_page[..per_page])
+        to_page.splice(0, per_page)
+    my_pages
 
+interleave_array = (ar1, ar2) ->
+    # make copies of smaller for unshift
+    if ar1.length > ar2.length
+        larger = ar1
+        smaller = ar2[..]
+    else
+        larger = ar2
+        smaller = ar1[..]
+    rate = Math.floor(larger.length / smaller.length)
+    res = []
+    k = 0
+    for i in larger
+        k += 1
+        res.push(i)
+        if smaller.length
+            res.push(smaller.shift()) if (k % rate) == 0
+    res
+
+
+
+# window.onresize smoother
 on_resize = (cbk, t) ->
     window.onresize = ->
         clearTimeout(t)
         t = setTimeout(cbk, 400)
     cbk
 
+
+# A gargantuan controller class for performing searches
+# TODO: rewrite everything with Emberjs if I'm actually going to use this
 class SearchRequest
     currentPage: -1
     queryString: null
 
-    images: []
-    pages: []
-
     constructor: (query) ->
         console.log('created new GoogleRequest')
+
+        @images = []
+        @pages = []
 
         @queryString = query
         that = this
@@ -67,52 +93,89 @@ class SearchRequest
         console.log(results)
         results.each (i, el) =>
             $this = $(el)
-            url = URI($this.find('h3.r > a').attr('href'))
+            google_link = URI($this.find('h3.r > a').attr('href'))
+            url = google_link.search(true).q
+
+            tags = [
+                {name: 'TLD', value: URI(url).tld()}
+                {name: 'Type', value: 'Page'}
+            ]
 
             res = new SearchResult
-                tld : url.tld()
-                url : url.search(true).q
+                url : url
                 title : $this.find('h3.r > a').text()
                 description : $this.find('.s > .st').text()
                 original_dom_element: this
+                tags: tags
+
             @pages.push(res)
         console.log('finished processing pages')
         if @images.length
             @startUI()
 
     processImageResults: (data) ->
-        # TODO
-        console.log(data)
-        @images = ['derp']
+        page = $(data)
+        results = page.find('.images_table td')
+        results.each (i, el) =>
+            $this = $(el)
+            window.TD = el
+            google_link = URI($this.find('a').attr('href'))
+
+            # parse last text line
+            size_data = el.childNodes[ el.childNodes.length - 1 ].textContent
+            dims = size_data.split(' - ')[0]
+            format = size_data.split(' ')
+            format = format[format.length - 1]
+
+            nodes = Array.prototype.slice.call(el.childNodes)
+            description = (n.textContent for n in nodes[5..-2]).join(' ')
+
+            tags = [
+                {name: 'Type', value: 'Image'}
+                {name: 'Format', value: format}
+                {name: 'TLD', value: URI(google_link.search(true).imgrefurl).tld()}
+            ]
+
+            res = new ImageResult
+                url: google_link.toString()
+                src: $this.find('img').attr('src')
+                width: $this.find('img').attr('width')
+                height: $this.find('img').attr('height')
+                description: description
+                tags: tags
+            @images.push(res)
+
         console.log('finished processing images')
+        # Ugly locks
         if @pages.length
             @startUI()
 
 
     startUI: ->
         console.log('started UI')
+        window.filterController = new FilterController
         @chuckPages()
         @advancePage()
         load_more = =>
             @advancePage()
         $('<div class="load-more">Load more items...</div>').appendTo($('body')).click(load_more).inview(load_more)
 
-    # simulate pagination until real googling is a thing
+    # simulate pagination to reduce DOM strain, and because Google is hating pretty hard
     chuckPages: (per_page = 15) ->
-        to_page = @pages[..]
-        my_pages = []
-        while to_page.length
-            my_pages.push(to_page[..per_page])
-            to_page.splice(0, per_page)
-        @results = my_pages
+        results = interleave_array(@pages, @images)
+        @results = chunk_array(results, per_page)
 
     advancePage: ->
         @currentPage += 1
-        my_page = @results[@currentPage]
+        items = @results[ @currentPage ]
+        # re-draw filter ui
+        # boy I wish I was using Emberjs
+        window.filterController.addItems(items)
+        window.filterController.refreshUI()
         # use a dummy element because isotope is really tempermental about wanting
         # jquery-constructed arrays
         dummy = $('<div></div>')
-        dummy.append(i.rep for i in page)
+        dummy.append(i.rep for i in items)
         items = dummy.children()
         window.ISO.isotope('insert', items)
 
@@ -128,7 +191,6 @@ tag_template = '''
     {{/each}}
 </div>
 '''
-
 
 class SearchResult
 
@@ -151,15 +213,16 @@ class SearchResult
         @url = opts.url
         @description = opts.description
         @title = opts.title
-        @tld = URI(opts.url).tld()
+        @tags = opts.tags
         # Invoke template to produce DOM item
         @rep = @TEMPLATE(this)
+        $(@rep).data('result', this)
+
 
 class ImageResult extends SearchResult
     TEMPLATE : Handlebars.compile("""
     <a class="search-result" href="{{url}}">
-        <h1>{{title}}</h1>
-        <img src="{{imgSrc}}" alt="{{title}}" />
+        <img src="{{imgSrc}}" width="{{width}}" height="{{height}}" alt="{{title}}" />
         <p>{{description}}</p>
         <p class="size">{{size}}</p>
         #{tag_template}
@@ -170,15 +233,59 @@ class ImageResult extends SearchResult
         super(opts)
         @imgSrc = opts.src
         @size = opts.size
+        @width = opts.width
+        @height = opts.height
         @rep = @TEMPLATE(this)
+        $(@rep).data('result', this)
+
+# use to keep track of possible values for each tag
+class Set
+    constructor: (items) ->
+        @contents = []
+
+    contains: (i) ->
+        @contents.indexOf(i) > -1
+
+    addItem: (i) ->
+        @contents.push(i) unless @contains(i)
+
+class FilterController
+    constructor: ->
+        @tags = {}
+
+    addItems: (items) ->
+        for i in items
+            for t in i.tags
+                if (not @tags[t.name]) || (not @tags[t.name].constructor == Set)
+                    @tags[t.name] = new Set()
+                @tags[t.name].addItem(t.value)
+
+    buildUI: ->
+        box = $('<div id="filter-box"></div>')
+        for tag_name, set of @tags
+            console.log(tag_name, 'is a set of', set)
+            grp = $('<div class="btn-group input-prepend"></div>').data('filter-tag', tag_name)
+            grp.append( $("""<span class="add-on">#{tag_name}</span>""") )
+            $("""<button type="button" class="btn">All</button>""").data('filter-value', '!all')
+            for opt in set.contents
+                grp.append(
+                    $("""<button type="button" class="btn">#{opt}</button>""").data('filter-value', opt)
+                )
+            console.log('built group', grp)
+            grp.appendTo(box)
+        @rep = box
+
+    refreshUI: ->
+        @rep.remove() if @rep
+        @buildUI()
+        @rep.appendTo($('#filters'))
+        console.log(@rep)
+
+
+
 
     
-# Global state brought to you by
-# ACID ENGINEERING
 window.CURRENT_SEARCH = CURRENT_SEARCH = null
-
-
-
 
 # time to play
 $('document').ready ->
