@@ -28,26 +28,31 @@ on_resize = (cbk, t) ->
 class SearchRequest
     currentPage: -1
     queryString: null
-    items: null
+
+    images: []
+    pages: []
 
     constructor: (query) ->
         console.log('created new GoogleRequest')
-        @items = []
+
         @queryString = query
         that = this
         # search a static proxy page because Google denies CORS and iframes
-        $.get('/search/',
-            {
-                q: query,
-            },
+        $.get('/search/web/' + encodeURI(query),
             (data, textStatus, xhr) =>
                 # TODO: process data
-                @processResults(data)
+                @processPageResults(data)
+        )
+        $.get('/search/images/' + encodeURI(query),
+            (data, textStatus, xhr) =>
+                # TODO: process data
+                @processImageResults(data)
         )
 
-    processResults: (data) ->
+    processPageResults: (data) ->
         page = $(data)
         results = page.find('li.g')
+        console.log(results)
         results.each (i, el) =>
             $this = $(el)
             url = URI($this.find('h3.r > a').attr('href'))
@@ -58,7 +63,22 @@ class SearchRequest
                 title : $this.find('h3.r > a').text()
                 description : $this.find('.s > .st').text()
                 original_dom_element: this
-            @items.push(res)
+            @pages.push(res)
+        console.log('finished processing pages')
+        if @images.length
+            @startUI()
+
+    processImageResults: (data) ->
+        # TODO
+        console.log(data)
+        @images = ['derp']
+        console.log('finished processing images')
+        if @pages.length
+            @startUI()
+
+
+    startUI: ->
+        console.log('started UI')
         @chuckPages()
         @advancePage()
         load_more = =>
@@ -67,16 +87,16 @@ class SearchRequest
 
     # simulate pagination until real googling is a thing
     chuckPages: (per_page = 15) ->
-        to_page = @items[..]
-        pages = []
+        to_page = @pages[..]
+        my_pages = []
         while to_page.length
-            pages.push(to_page[..per_page])
+            my_pages.push(to_page[..per_page])
             to_page.splice(0, per_page)
-        @pages = pages
+        @results = my_pages
 
     advancePage: ->
         @currentPage += 1
-        page = @pages[@currentPage]
+        my_page = @results[@currentPage]
         # use a dummy element because isotope is really tempermental about wanting
         # jquery-constructed arrays
         dummy = $('<div></div>')
@@ -85,20 +105,28 @@ class SearchRequest
         window.ISO.isotope('insert', items)
 
 
+
+tag_template = '''
+<div class="tags">
+    {{#each tags}}
+    <div class="tag">
+        <div class="name">{{this.name}}</div>
+        <div class="value">{{this.value}}</div>
+    </div>
+    {{/each}}
+</div>
+'''
+
+
 class SearchResult
 
-    TEMPLATE : Handlebars.compile('''
+    TEMPLATE : Handlebars.compile("""
     <a class="search-result" href="{{url}}">
         <h1>{{title}}</h1>
         <p>{{description}}</p>
-        <div class="tags">
-            <div class="tag">
-                <div class="name">TLD</div>
-                <div class="value">{{tld}}</div>
-            </div>
-       </div>
+        #{tag_template}
     </a>
-    ''')
+    """)
 
     tld: null
     url: null
@@ -114,8 +142,24 @@ class SearchResult
         @tld = URI(opts.url).tld()
         # Invoke template to produce DOM item
         @rep = @TEMPLATE(this)
-        
-   
+
+class ImageResult extends SearchResult
+    TEMPLATE : Handlebars.compile("""
+    <a class="search-result" href="{{url}}">
+        <h1>{{title}}</h1>
+        <img src="{{imgSrc}}" alt="{{title}}" />
+        <p>{{description}}</p>
+        <p class="size">{{size}}</p>
+        #{tag_template}
+    </a>
+    """)
+
+    constructor: (opts) ->
+        super(opts)
+        @imgSrc = opts.src
+        @size = opts.size
+        @rep = @TEMPLATE(this)
+
     
 # Global state brought to you by
 # ACID ENGINEERING
