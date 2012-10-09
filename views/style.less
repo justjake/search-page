@@ -109,12 +109,21 @@ html, body {
 @blue-bg: #4D90FE;
 
 
+.border-box {
+    // new box model: Padding is added inside width, instead of outside.
+    -ms-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    -webkit-box-sizing: border-box;
+    -o-box-sizing: border-box;
+    box-sizing: border-box;
+}
+
+
 .search-bar {
     font-size: 3em;
     background: #fff;
     border-bottom: 3px solid @blue;
     padding: 1em @body-margin;
-    // box-shadow: 0px 1px 5px rgba(0,0,0, 0.2);
 
     .container {
         display: table;
@@ -132,9 +141,10 @@ html, body {
 }
 
 input {
-    box-sizing: border-box;
+    .border-box;
     padding: 0.25em 0.5em;
     border: 2px solid #ddd;
+    border-radius: 0; // dislike rounded corners in MobileWebkit
 }
 
 
@@ -163,9 +173,7 @@ h1 {margin: 0;}
 
    .search-result {
        display: block;
-       box-sizing: border-box;
-       -ms-box-sizing: border-box;
-       -moz-box-sizing: border-box;
+       .border-box;
        background: #fdfdfd;
        padding: 1em;
        border: 1px solid #ddd;
@@ -186,6 +194,8 @@ h1 {margin: 0;}
    }
 
    .tag {
+       margin-right: 0.25em;
+       margin-bottom: 0.25em;
        display: inline-block;
        border: 1px solid #ddd;
        background: #fafafa;
