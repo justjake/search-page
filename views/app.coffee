@@ -67,11 +67,11 @@ class SearchRequest
     currentPage: -1
     queryString: null
 
-    images: []
-    pages: []
-
     constructor: (query) ->
         console.log('created new GoogleRequest')
+
+        @images = []
+        @pages = []
 
         @queryString = query
         that = this
@@ -240,10 +240,8 @@ class ImageResult extends SearchResult
 
 # use to keep track of possible values for each tag
 class Set
-    contents: []
-    contructor: (items) ->
-        for i in items
-            @addItem(i)
+    constructor: (items) ->
+        @contents = []
 
     contains: (i) ->
         @contents.indexOf(i) > -1
@@ -252,17 +250,20 @@ class Set
         @contents.push(i) unless @contains(i)
 
 class FilterController
-    tags: {}
+    constructor: ->
+        @tags = {}
 
     addItems: (items) ->
         for i in items
             for t in i.tags
-                @tags[t.name] = new Set unless @tags[t.name]?
+                if (not @tags[t.name]) || (not @tags[t.name].constructor == Set)
+                    @tags[t.name] = new Set()
                 @tags[t.name].addItem(t.value)
 
     buildUI: ->
         box = $('<div id="filter-box"></div>')
-        for tag_name, set in @tags
+        for tag_name, set of @tags
+            console.log(tag_name, 'is a set of', set)
             grp = $('<div class="btn-group input-prepend"></div>').data('filter-tag', tag_name)
             grp.append( $("""<span class="add-on">#{tag_name}</span>""") )
             $("""<button type="button" class="btn">All</button>""").data('filter-value', '!all')
@@ -270,6 +271,7 @@ class FilterController
                 grp.append(
                     $("""<button type="button" class="btn">#{opt}</button>""").data('filter-value', opt)
                 )
+            console.log('built group', grp)
             grp.appendTo(box)
         @rep = box
 
