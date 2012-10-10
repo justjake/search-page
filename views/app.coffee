@@ -303,8 +303,10 @@ window.CURRENT_SEARCH = CURRENT_SEARCH = null
 $('document').ready ->
     $('.search-bar').submit (e) ->
         e.preventDefault()
+        $('.load-more').remove()
+        $('#results').remove()
+        $('<div id="results"></div>').appendTo($('body'))
         window.CURRENT_SEARCH = new SearchRequest( $('#search-field').val() )
-        window.ISO.isotope('destroy') if window.ISO?
         # realllllly cool isotope thing
         window.ISO = $('#results').isotope
             itemSelector: '.search-result'
